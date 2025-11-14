@@ -54,10 +54,8 @@ Tips:
    - Capture `xcrun simctl spawn <udid> log show --style syslog --last 2m --predicate 'process == "egui-ios-demo"'`
      and attach it to the issue you file.
 
-## 3. Manual fallback (deprecated harness)
+# No fallback harness
 
-The previous Swift/Xcode harness still lives in `ios/runner-smoke/RunnerSmoke.xcodeproj` for debugging
-custom UIKit code. Keep it only if you need to inspect Swift-side behaviour manually; the
-cargo-bundle flow above is now the canonical way to package + validate egui on iOS. When using the old
-harness, remember to run `scripts/build_ios_runner.sh`, copy the resulting xcframework/header into
-`Frameworks/` and `Generated/`, then drive it via `xcodebuild` or Xcode UI.
+The cargo-bundle/`ios-cargo` pipeline is now the only supported way to package and validate egui on iOS.
+If you need to experiment with UIKit/SwiftUI code, add it directly to `apps/eframe-ios-app` instead of
+maintaining a parallel Xcode project.
