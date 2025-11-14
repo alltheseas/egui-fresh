@@ -12,7 +12,7 @@ use eframe::{NativeOptions, egui};
 ///
 /// Exported with C ABI so Swift / Objective‑C can call it directly once the
 /// crate is compiled into an `.a` or `.xcframework`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn eframe_ios_run_demo() {
     #[cfg(target_os = "ios")]
     {
@@ -38,7 +38,7 @@ fn run_demo_app() {
     if let Err(err) = eframe::run_native(
         "egui_ios_demo",
         native_options,
-        Box::new(|cc| Ok(Box::new(egui_demo_app::DemoApp::new(cc)))),
+        Box::new(|cc| Ok(Box::new(egui_demo_app::WrapApp::new(cc)))),
     ) {
         log::error!("eframe_ios_run_demo failed: {err}");
     }
