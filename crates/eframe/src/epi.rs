@@ -332,6 +332,10 @@ pub struct NativeOptions {
     ///
     /// When `true`, [`winit::platform::run_on_demand::EventLoopExtRunOnDemand`] is used.
     /// When `false`, [`winit::event_loop::EventLoop::run`] is used.
+    ///
+    /// On iOS the event loop never yields back to the caller, so `run_and_return`
+    /// must stay `false`. Attempting to set it will make [`crate::run_native`]
+    /// return an error up front.
     pub run_and_return: bool,
 
     /// Hook into the building of an event loop before it is run.
