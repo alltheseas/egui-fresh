@@ -1298,6 +1298,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "eframe-ios-app"
+version = "0.33.2"
+dependencies = [
+ "eframe",
+ "egui_demo_app",
+ "env_logger",
+ "log",
+]
+
+[[package]]
 name = "eframe-ios-runner"
 version = "0.33.2"
 dependencies = [

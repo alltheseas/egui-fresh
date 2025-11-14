@@ -1,67 +1,61 @@
 # iOS IME validation checklist
 
-Until we have automated simulator coverage, run the following steps manually
-whenever we need to confirm that winit/egui still receive `WindowEvent::Ime`
-events on iOS.
+Until we have automated simulator coverage, follow the steps below whenever we need to confirm that
+`WindowEvent::Ime` events still reach egui on iOS.
 
-## 1. Build the runner
+## 0. Prerequisites
 
-```
-./scripts/build_ios_runner.sh
-```
+1. Install Python 3.11 or newer (`python3 --version`).
+2. Install `cargo-bundle` (currently requires nightly):
+   ```bash
+   rustup install nightly
+   cargo +nightly install cargo-bundle
+   ```
+3. Install the required Rust targets:
+   ```bash
+   rustup target add aarch64-apple-ios
+   rustup target add aarch64-apple-ios-sim
+   ```
+4. Optional: export `CARGO_TARGET_DIR` if you use a custom target directory.
 
-This produces:
+## 1. Automated smoke test (`ios-cargo`)
 
-* `target/ios/EframeIos.xcframework`
-* `target/ios/eframe_ios_runner.h`
+We ship a small binary crate (`apps/eframe-ios-app`) that launches `egui_demo_app`. Build, bundle,
+install, and launch it in the simulator with:
 
-Both artefacts are required for the Xcode project in the next step.
-
-## 2. Create or reuse a SwiftUI shell
-
-1. In Xcode, create a new *App* project named `EguiImeTest`.
-2. Add `target/ios/EframeIos.xcframework` to the project (drag it into the
-   Project navigator, select “Copy items if needed”).
-3. Add a bridging header (e.g. `EguiImeTest-Bridging-Header.h`) containing
-   `#include "eframe_ios_runner.h"`.
-4. Update build settings:
-   * `Framework Search Paths`: add `$(PROJECT_DIR)/../target/ios`.
-   * `Header Search Paths`: add `$(PROJECT_DIR)/../target/ios`.
-   * `Objective-C Bridging Header`: point to the header you just created.
-   * Ensure the xcframework is set to “Embed & Sign” (or “Do Not Embed” if you
-     prefer to handle it manually).
-
-Replace the SwiftUI `App` body with:
-
-```swift
-import SwiftUI
-
-@main
-struct EguiImeTestApp: App {
-    init() {
-        eframe_ios_run_demo()
-    }
-
-    var body: some Scene {
-        WindowGroup {
-            // Empty view: Rust renders everything.
-            Color.clear
-        }
-    }
-}
+```bash
+./ios-cargo run --sim --manifest-path apps/eframe-ios-app/Cargo.toml
 ```
 
-## 3. Simulator validation
+What happens:
 
-1. Select an iPhone simulator (e.g. iPhone 16, iOS 18).
-2. Run the app from Xcode.
-3. Inside the egui demo window:
-   * Open “Widgets → Text Edit” and tap the multiline text field.
-   * The software keyboard must appear.
-   * Type characters and verify they show up immediately inside the egui text
-     edit. This confirms that `WindowEvent::Ime` events reach egui.
-4. Repeat the test on “Widgets → Text Edit (Singleline)” if you need extra
-   coverage.
+1. `cargo bundle --target aarch64-apple-ios-sim --manifest-path apps/eframe-ios-app/Cargo.toml`
+   produces `target/aarch64-apple-ios-sim/debug/bundle/ios/egui-ios-demo.app`.
+2. The script installs the bundle into the booted simulator (or boots the newest iPhone if none are running).
+3. The app is launched via `xcrun simctl launch --console …`, so stdout/stderr (including
+   `[egui-ios-ime] …` logs) stream to your terminal.
 
-If the keyboard fails to appear or characters don’t show up, capture the Xcode
-console log and file an issue referencing the egui and winit versions used.
+Tips:
+
+- Pass `--device <udid>` to target a specific simulator.
+- Use `--release` (and/or `--ipad`) when you need IPA archives.
+
+## 2. IME validation steps
+
+1. Once the simulator displays the egui demo, open “Widgets → Text Edit”.
+2. Tap inside both the multi-line and single-line text fields. The software keyboard must appear.
+3. Type a short phrase. Characters must show up immediately in egui **and** the terminal that ran
+   `ios-cargo` should log entries such as:
+   ```
+   [egui-ios-ime] WindowEvent::Ime: Commit("hello")
+   ```
+4. If the keyboard does not appear or the logs stay silent:
+   - Toggle “I/O → Keyboard → Toggle Software Keyboard” (⇧⌘K) in the simulator.
+   - Capture `xcrun simctl spawn <udid> log show --style syslog --last 2m --predicate 'process == "egui-ios-demo"'`
+     and attach it to the issue you file.
+
+# No fallback harness
+
+The cargo-bundle/`ios-cargo` pipeline is now the only supported way to package and validate egui on iOS.
+If you need to experiment with UIKit/SwiftUI code, add it directly to `apps/eframe-ios-app` instead of
+maintaining a parallel Xcode project.

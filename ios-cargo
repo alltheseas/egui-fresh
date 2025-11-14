@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import zipfile
+
+try:
+    import tomllib
+except ModuleNotFoundError as err:  # pragma: no cover - python <3.11 fallback
+    raise SystemExit(
+        "python3.11+ is required to run ios-cargo (missing stdlib module 'tomllib')"
+    ) from err
+
+
+def parse_cargo_toml(manifest_path: str):
+    with open(manifest_path, "rb") as f:
+        cargo_toml = tomllib.load(f)
+
+    package = cargo_toml.get("package")
+    if package is None:
+        raise SystemExit(f"{manifest_path} does not describe a package")
+
+    bundle_metadata = package.get("metadata", {}).get("bundle", {})
+    bundle_name = bundle_metadata.get("name", package["name"])
+    bundle_id = bundle_metadata.get("identifier")
+    if bundle_id is None:
+        raise SystemExit(
+            f"{manifest_path} is missing `[package.metadata.bundle] identifier`"
+        )
+
+    return bundle_name, bundle_id
+
+
+def ipa(args):
+    print("Releasing the build...")
+    args.release = True
+    build(args)
+
+    app_name, _ = parse_cargo_toml(args.manifest_path)
+    build_type = "release"
+    target = get_target(args)
+    cargo_target_dir = os.getenv("CARGO_TARGET_DIR", "target")
+    app_path = os.path.join(
+        cargo_target_dir, target, build_type, "bundle", "ios", f"{app_name}.app"
+    )
+    temp_dir = tempfile.mkdtemp()
+
+    payload_dir = os.path.join(temp_dir, "Payload")
+    os.makedirs(payload_dir)
+    shutil.copytree(app_path, os.path.join(payload_dir, f"{app_name}.app"))
+
+    ipa_path = f"{app_name}.ipa"
+    with zipfile.ZipFile(ipa_path, "w", zipfile.ZIP_DEFLATED) as ipa_file:
+        for root, _dirs, files in os.walk(payload_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                ipa_file.write(
+                    file_path, os.path.relpath(file_path, os.path.dirname(payload_dir))
+                )
+
+    shutil.rmtree(payload_dir)
+    print(f"Created {ipa_path}")
+
+
+def post_process_info_plist(plist_path, ipad):
+    try:
+        with open("insert.plist", "r") as insert_file:
+            insert_content = insert_file.read()
+    except FileNotFoundError:
+        insert_content = ""
+
+    with open(plist_path, "r") as plist_file:
+        plist_content = plist_file.read()
+
+    if ipad:
+        ipad_content = """
+        <key>UIDeviceFamily</key>
+        <array>
+            <integer>1</integer>
+            <integer>2</integer>
+        </array>
+        <key>UISupportedInterfaceOrientations</key>
+        <array>
+            <string>UIInterfaceOrientationPortrait</string>
+            <string>UIInterfaceOrientationLandscapeLeft</string>
+            <string>UIInterfaceOrientationLandscapeRight</string>
+        </array>
+        <key>UISupportedInterfaceOrientations~ipad</key>
+        <array>
+            <string>UIInterfaceOrientationPortrait</string>
+            <string>UIInterfaceOrientationPortraitUpsideDown</string>
+            <string>UIInterfaceOrientationLandscapeLeft</string>
+            <string>UIInterfaceOrientationLandscapeRight</string>
+        </array>
+        """
+        insert_content += ipad_content
+
+    modified_content = plist_content.replace("</dict>", f"{insert_content}\n</dict>")
+
+    with open(plist_path, "w") as plist_file:
+        plist_file.write(modified_content)
+
+
+def get_target(args):
+    target = "aarch64-apple-ios"
+    if args.x86:
+        target = "x86_64-apple-ios"
+    elif args.sim:
+        target = "aarch64-apple-ios-sim"
+    if args.target:
+        target = args.target
+    return target
+
+
+def build(args):
+    target = get_target(args)
+    command = ["cargo", "bundle", "--target", target, "--manifest-path", args.manifest_path]
+    if args.release:
+        command.append("--release")
+
+    print(f"Running command: {' '.join(command)}")
+    subprocess.run(["cargo", "bundle", "--target", target], check=True, cwd=_manifest_dir(args))
+    app_name, _ = parse_cargo_toml(args.manifest_path)
+    build_type = "release" if args.release else "debug"
+    cargo_target_dir = os.getenv("CARGO_TARGET_DIR", "target")
+    plist_path = os.path.join(
+        cargo_target_dir,
+        target,
+        build_type,
+        "bundle",
+        "ios",
+        f"{app_name}.app",
+        "Info.plist",
+    )
+    post_process_info_plist(plist_path, args.ipad)
+
+
+def get_booted_device():
+    result = subprocess.run(
+        ["xcrun", "simctl", "list", "devices", "--json"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    devices = json.loads(result.stdout)
+    for runtime in devices["devices"]:
+        for dev in devices["devices"][runtime]:
+            if dev["state"] == "Booted":
+                return dev["udid"]
+    return None
+
+
+def boot_device(device):
+    print(f"Booting device {device}...")
+    subprocess.run(["xcrun", "simctl", "boot", device], check=True)
+    print(f"Device {device} booted.")
+
+
+def get_newest_iphone_udid():
+    result = subprocess.run(
+        ["xcrun", "simctl", "list", "devices", "--json"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    devices = json.loads(result.stdout)
+
+    for runtime in devices["devices"]:
+        for dev in devices["devices"][runtime]:
+            if "iPhone" in dev["name"] and dev["isAvailable"] and "SE" not in dev["name"]:
+                return dev["udid"]
+
+    raise RuntimeError("No available iPhone simulators found")
+
+
+def run_build(args):
+    app_name, app_id = parse_cargo_toml(args.manifest_path)
+    build_type = "release" if args.release else "debug"
+    target = get_target(args)
+
+    cargo_target_dir = os.getenv("CARGO_TARGET_DIR", "target")
+    app_path = os.path.join(
+        cargo_target_dir, target, build_type, "bundle", "ios", f"{app_name}.app"
+    )
+
+    device = args.device
+    if device == "booted":
+        device = get_booted_device()
+        if device is None:
+            device = get_newest_iphone_udid()
+            boot_device(device)
+
+    install_command = ["xcrun", "simctl", "install", device, app_path]
+    launch_command = ["xcrun", "simctl", "launch", "--console", device, app_id]
+
+    print(f"Running command: {' '.join(install_command)}")
+    subprocess.run(install_command, check=True)
+
+    print(f"Running command: {' '.join(launch_command)}")
+    subprocess.run(launch_command, check=True)
+
+
+def run(args):
+    print("Running the build process...")
+    build(args)
+    print("Running the build...")
+    run_build(args)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Wraps cargo-bundle for iOS (build/run/ipa).",
+    )
+    parser.add_argument(
+        "--manifest-path",
+        default="Cargo.toml",
+        help="Path to the Cargo.toml that contains [package.metadata.bundle]",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    def add_common_args(p):
+        p.add_argument("--x86", action="store_true", help="Use x86 target")
+        p.add_argument("--sim", action="store_true", help="Use simulator target")
+        p.add_argument("--target", type=str, help="Specify custom target triple")
+        p.add_argument("--release", "-r", action="store_true", help="Build for release")
+        p.add_argument("--ipad", action="store_true", help="Include iPad Info.plist keys")
+
+    build_parser = subparsers.add_parser("build", help="Build the project")
+    add_common_args(build_parser)
+    build_parser.set_defaults(func=build)
+
+    run_parser = subparsers.add_parser("run", help="Build and run the project")
+    add_common_args(run_parser)
+    run_parser.add_argument(
+        "--device", type=str, default="booted", help="Simulator UDID or 'booted'"
+    )
+    run_parser.set_defaults(func=run)
+
+    run_build_parser = subparsers.add_parser(
+        "run-build", help="Run an already built project"
+    )
+    add_common_args(run_build_parser)
+    run_build_parser.add_argument(
+        "--device", type=str, default="booted", help="Simulator UDID or 'booted'"
+    )
+    run_build_parser.set_defaults(func=run_build)
+
+    release_parser = subparsers.add_parser("ipa", help="Create an .ipa archive")
+    add_common_args(release_parser)
+    release_parser.set_defaults(func=ipa)
+
+    args = parser.parse_args()
+    args.manifest_path = os.path.abspath(args.manifest_path)
+    args.manifest_path = os.path.abspath(args.manifest_path)
+    args.func(args)
+
+
+def _manifest_dir(args):
+    directory = os.path.dirname(args.manifest_path)
+    return directory if directory else os.getcwd()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "apps/eframe-ios-app",
   "crates/ecolor",
   "crates/egui_demo_app",
   "crates/egui_demo_lib",

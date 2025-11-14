@@ -5,6 +5,7 @@
 #![allow(clippy::exit)]
 
 mod deny;
+mod ios;
 pub(crate) mod utils;
 
 type DynError = Box<dyn std::error::Error>;
@@ -23,6 +24,7 @@ fn try_main() -> Result<(), DynError> {
     match args.as_slice() {
         &[] | &["-h"] | &["--help"] => print_help(),
         &["deny", ..] => deny::deny(&args[1..])?,
+        &["ios-run-bundle", ..] => ios::bundle_run(&args[1..])?,
         c => Err(format!("Invalid arguments {c:?}"))?,
     }
     Ok(())
@@ -34,6 +36,7 @@ fn print_help() {
 
     Subcommands
     deny: Run cargo-deny for all targets
+    ios-run-bundle: Use ios-cargo (cargo-bundle) to build/install the egui demo bundle
 
     Options
     -h, --help: print help and exit

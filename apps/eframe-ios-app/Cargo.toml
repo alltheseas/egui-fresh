@@ -1,0 +1,21 @@
+[package]
+name = "eframe-ios-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "egui demo app packaged for cargo-bundle/iOS smoke testing"
+
+[package.metadata.bundle]
+name = "egui-ios-demo"
+identifier = "com.egui.ios.demo"
+
+[dependencies]
+eframe = { workspace = true, default-features = false, features = [
+    "accesskit",
+    "default_fonts",
+    "wgpu",
+] }
+egui_demo_app = { workspace = true }
+env_logger = "0.11"
+log.workspace = true
