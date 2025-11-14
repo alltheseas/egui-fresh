@@ -5,6 +5,7 @@
 #![allow(clippy::exit)]
 
 mod deny;
+mod ios;
 pub(crate) mod utils;
 
 type DynError = Box<dyn std::error::Error>;
@@ -23,6 +24,7 @@ fn try_main() -> Result<(), DynError> {
     match args.as_slice() {
         &[] | &["-h"] | &["--help"] => print_help(),
         &["deny", ..] => deny::deny(&args[1..])?,
+        &["ios-sim-smoke"] => ios::sim_smoke()?,
         c => Err(format!("Invalid arguments {c:?}"))?,
     }
     Ok(())
@@ -34,6 +36,7 @@ fn print_help() {
 
     Subcommands
     deny: Run cargo-deny for all targets
+    ios-sim-smoke: Build the eframe iOS runner and compile the SwiftUI host with xcodebuild
 
     Options
     -h, --help: print help and exit
