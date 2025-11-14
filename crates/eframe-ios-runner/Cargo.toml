@@ -1,0 +1,18 @@
+[package]
+name = "eframe-ios-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "FFI helpers for launching eframe apps on iOS"
+homepage = "https://github.com/emilk/egui"
+repository = "https://github.com/emilk/egui"
+readme = "README.md"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+eframe = { workspace = true }
+egui_demo_app = { workspace = true }
+log.workspace = true
