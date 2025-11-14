@@ -144,8 +144,10 @@ impl<'app> WgpuWinitApp<'app> {
         }
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     fn recreate_window(&self, event_loop: &ActiveEventLoop, running: &WgpuWinitRunning<'app>) {
+        // Mobile platforms destroy the native surface when backgrounded,
+        // so recreate the root viewport window once we receive `Resumed`.
         let SharedState {
             egui_ctx,
             viewports,
@@ -165,8 +167,10 @@ impl<'app> WgpuWinitApp<'app> {
         .initialize_window(event_loop, egui_ctx, viewport_from_window, painter);
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     fn drop_window(&mut self) -> Result<(), egui_wgpu::WgpuError> {
+        // On suspend the underlying CA layer is no longer valid. Drop the window/surface
+        // so that a fresh one is created on the next resume.
         if let Some(running) = &mut self.running {
             let mut shared = running.shared.borrow_mut();
             shared.viewports.remove(&ViewportId::ROOT);
@@ -402,7 +406,7 @@ impl WinitApp for WgpuWinitApp<'_> {
         log::debug!("Event::Resumed");
 
         let running = if let Some(running) = &self.running {
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             self.recreate_window(event_loop, running);
             running
         } else {
@@ -436,7 +440,7 @@ impl WinitApp for WgpuWinitApp<'_> {
     }
 
     fn suspended(&mut self, _: &ActiveEventLoop) -> crate::Result<EventResult> {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         self.drop_window()?;
         Ok(EventResult::Save)
     }
