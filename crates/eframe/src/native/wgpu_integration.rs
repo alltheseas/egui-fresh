@@ -924,14 +924,23 @@ impl Viewport {
                     log::error!("on set_window: viewport_id {viewport_id:?} {err}");
                 }
 
-                self.egui_winit = Some(egui_winit::State::new(
+                let mut egui_state = egui_winit::State::new(
                     egui_ctx.clone(),
                     viewport_id,
                     event_loop,
                     Some(window.scale_factor() as f32),
                     event_loop.system_theme(),
                     painter.max_texture_side(),
-                ));
+                );
+
+                #[cfg(target_os = "ios")]
+                {
+                    // Ensure the very first frame already respects the device safe area,
+                    // even before winit has delivered any resize/focus events.
+                    egui_state.refresh_ios_safe_area();
+                }
+
+                self.egui_winit = Some(egui_state);
 
                 egui_winit::update_viewport_info(&mut self.info, egui_ctx, &window, true);
                 self.window = Some(window);
