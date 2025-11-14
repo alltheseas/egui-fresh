@@ -259,6 +259,17 @@ pub fn run_native(
     mut native_options: NativeOptions,
     app_creator: AppCreator<'_>,
 ) -> Result {
+    #[cfg(target_os = "ios")]
+    {
+        if native_options.run_and_return {
+            let err = std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "`NativeOptions::run_and_return` is not supported on iOS",
+            );
+            return Err(crate::Error::AppCreation(Box::new(err)));
+        }
+    }
+
     let renderer = init_native(app_name, &mut native_options);
 
     match renderer {
