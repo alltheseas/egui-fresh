@@ -313,7 +313,8 @@ pub struct NativeOptions {
 
     /// Specify whether or not hardware acceleration is preferred, required, or not.
     ///
-    /// Default: [`HardwareAcceleration::Preferred`].
+    /// Default: [`HardwareAcceleration::Preferred`] (but [`HardwareAcceleration::Required`] on iOS
+    /// to ensure Metal is always picked).
     pub hardware_acceleration: HardwareAcceleration,
 
     /// What rendering backend to use.
@@ -437,7 +438,11 @@ impl Default for NativeOptions {
             multisampling: 0,
             depth_buffer: 0,
             stencil_buffer: 0,
-            hardware_acceleration: HardwareAcceleration::Preferred,
+            hardware_acceleration: if cfg!(target_os = "ios") {
+                HardwareAcceleration::Required
+            } else {
+                HardwareAcceleration::Preferred
+            },
 
             #[cfg(any(feature = "glow", feature = "wgpu_no_default_features"))]
             renderer: Renderer::default(),
