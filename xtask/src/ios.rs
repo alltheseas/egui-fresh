@@ -49,7 +49,11 @@ pub(crate) fn bundle_run(args: &[&str]) -> Result<(), DynError> {
         env::var("IOS_BUNDLE_MANIFEST").unwrap_or_else(|_| "apps/eframe-ios-app/Cargo.toml".into());
 
     let mut cmd = Command::new("python3.11");
-    cmd.arg("ios-cargo").arg("--manifest-path").arg(&manifest).arg("run").arg("--sim");
+    cmd.arg("ios-cargo")
+        .arg("--manifest-path")
+        .arg(&manifest)
+        .arg("run")
+        .arg("--sim");
     cmd.args(args);
     cmd.current_dir(workspace_root());
 
