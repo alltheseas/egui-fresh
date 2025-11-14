@@ -13,6 +13,6 @@ readme = "README.md"
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
-eframe = { workspace = true }
+eframe = { workspace = true, default-features = false, features = ["wgpu"] }
 egui_demo_app = { workspace = true }
 log.workspace = true

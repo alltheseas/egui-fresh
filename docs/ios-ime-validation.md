@@ -20,14 +20,16 @@ Both artefacts are required for the Xcode project in the next step.
 ## 2. Create or reuse a SwiftUI shell
 
 1. In Xcode, create a new *App* project named `EguiImeTest`.
-2. Add `EframeIos.xcframework` to the project (drag it into the Project
-   navigator, select “Copy items if needed”).
-3. Add a bridging header (e.g. `EguiImeTest-Bridging-Header.h`) with
+2. Add `target/ios/EframeIos.xcframework` to the project (drag it into the
+   Project navigator, select “Copy items if needed”).
+3. Add a bridging header (e.g. `EguiImeTest-Bridging-Header.h`) containing
    `#include "eframe_ios_runner.h"`.
-4. Update the build settings of the app target:
-   * Set `Objective-C Bridging Header` to the header path.
-   * Ensure the app links against the xcframework (Xcode normally takes care of
-     this when you add it to “Frameworks, Libraries, and Embedded Content”).
+4. Update build settings:
+   * `Framework Search Paths`: add `$(PROJECT_DIR)/../target/ios`.
+   * `Header Search Paths`: add `$(PROJECT_DIR)/../target/ios`.
+   * `Objective-C Bridging Header`: point to the header you just created.
+   * Ensure the xcframework is set to “Embed & Sign” (or “Do Not Embed” if you
+     prefer to handle it manually).
 
 Replace the SwiftUI `App` body with:
 
