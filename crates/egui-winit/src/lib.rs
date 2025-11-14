@@ -15,6 +15,8 @@ pub use egui;
 #[cfg(feature = "accesskit")]
 use egui::accesskit;
 use egui::{Pos2, Rect, Theme, Vec2, ViewportBuilder, ViewportCommand, ViewportId, ViewportInfo};
+#[cfg(target_os = "ios")]
+use std::sync::OnceLock;
 pub use winit;
 
 pub mod clipboard;
@@ -283,6 +285,9 @@ impl State {
         }
 
         use winit::event::WindowEvent;
+
+        #[cfg(target_os = "ios")]
+        Self::maybe_log_ios_text_event(event);
 
         #[cfg(target_os = "ios")]
         match &event {
@@ -568,6 +573,32 @@ impl State {
                 }
             }
         }
+    }
+
+    #[cfg(target_os = "ios")]
+    fn maybe_log_ios_text_event(event: &winit::event::WindowEvent) {
+        if !Self::should_log_ios_ime_events() {
+            return;
+        }
+
+        match event {
+            winit::event::WindowEvent::Ime(ime) => {
+                eprintln!("[egui-ios-ime] WindowEvent::Ime: {ime:?}");
+            }
+            _ => {}
+        }
+    }
+
+    #[cfg(target_os = "ios")]
+    fn should_log_ios_ime_events() -> bool {
+        static SHOULD_LOG: OnceLock<bool> = OnceLock::new();
+        *SHOULD_LOG.get_or_init(|| match std::env::var("EGUI_IOS_LOG_IME") {
+            Ok(val) => {
+                let trimmed = val.trim();
+                !(trimmed.is_empty() || trimmed == "0" || trimmed.eq_ignore_ascii_case("false"))
+            }
+            Err(_) => false,
+        })
     }
 
     pub fn ime_event_enable(&mut self) {

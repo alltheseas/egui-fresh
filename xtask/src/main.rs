@@ -25,6 +25,8 @@ fn try_main() -> Result<(), DynError> {
         &[] | &["-h"] | &["--help"] => print_help(),
         &["deny", ..] => deny::deny(&args[1..])?,
         &["ios-sim-smoke"] => ios::sim_smoke()?,
+        &["ios-sim-launch"] => ios::sim_launch()?,
+        &["ios-run-bundle", ..] => ios::bundle_run(&args[1..])?,
         c => Err(format!("Invalid arguments {c:?}"))?,
     }
     Ok(())
@@ -37,6 +39,8 @@ fn print_help() {
     Subcommands
     deny: Run cargo-deny for all targets
     ios-sim-smoke: Build the eframe iOS runner and compile the SwiftUI host with xcodebuild
+    ios-sim-launch: Build, install, and launch the RunnerSmoke host in the simulator (requires CoreSimulator)
+    ios-run-bundle: Use ios-cargo (cargo-bundle) to build/install the egui demo bundle
 
     Options
     -h, --help: print help and exit
