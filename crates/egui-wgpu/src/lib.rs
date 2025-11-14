@@ -332,20 +332,40 @@ impl std::fmt::Debug for WgpuConfiguration {
 
 impl Default for WgpuConfiguration {
     fn default() -> Self {
+        let on_surface_error = {
+            #[cfg(target_os = "ios")]
+            {
+                Arc::new(|err| match err {
+                    wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+                        SurfaceErrorAction::RecreateSurface
+                    }
+                    other => {
+                        log::warn!("Dropped frame with error: {other}");
+                        SurfaceErrorAction::SkipFrame
+                    }
+                })
+            }
+
+            #[cfg(not(target_os = "ios"))]
+            {
+                Arc::new(|err| {
+                    if err == wgpu::SurfaceError::Outdated {
+                        // This error occurs when the app is minimized on Windows.
+                        // Silently return here to prevent spamming the console with:
+                        // "The underlying surface has changed, and therefore the swap chain must be updated"
+                    } else {
+                        log::warn!("Dropped frame with error: {err}");
+                    }
+                    SurfaceErrorAction::SkipFrame
+                })
+            }
+        };
+
         Self {
             present_mode: wgpu::PresentMode::AutoVsync,
             desired_maximum_frame_latency: None,
             wgpu_setup: Default::default(),
-            on_surface_error: Arc::new(|err| {
-                if err == wgpu::SurfaceError::Outdated {
-                    // This error occurs when the app is minimized on Windows.
-                    // Silently return here to prevent spamming the console with:
-                    // "The underlying surface has changed, and therefore the swap chain must be updated"
-                } else {
-                    log::warn!("Dropped frame with error: {err}");
-                }
-                SurfaceErrorAction::SkipFrame
-            }),
+            on_surface_error,
         }
     }
 }

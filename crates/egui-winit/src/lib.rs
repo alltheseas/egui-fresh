@@ -224,6 +224,14 @@ impl State {
         &mut self.egui_input
     }
 
+    /// Refresh the cached safe-area insets on iOS so that the next frame uses
+    /// up-to-date Dynamic Island / notch information even before we receive
+    /// any window events (e.g. just after creating a window).
+    #[cfg(target_os = "ios")]
+    pub fn refresh_ios_safe_area(&mut self) {
+        self.egui_input_mut().safe_area_insets = Some(safe_area::get_safe_area_insets());
+    }
+
     /// Prepare for a new frame by extracting the accumulated input,
     ///
     /// as well as setting [the time](egui::RawInput::time) and [screen rectangle](egui::RawInput::screen_rect).
