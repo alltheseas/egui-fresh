@@ -1,93 +1,63 @@
 # iOS IME validation checklist
 
-Until we have automated simulator coverage, run the following steps manually
-whenever we need to confirm that winit/egui still receive `WindowEvent::Ime`
-events on iOS.
+Until we have automated simulator coverage, follow the steps below whenever we need to confirm that
+`WindowEvent::Ime` events still reach egui on iOS.
 
-## 0. Automated smoke test
+## 0. Prerequisites
 
-Run the headless validation command:
+1. Install Python 3.11 or newer (`python3 --version`).
+2. Install `cargo-bundle` (currently requires nightly):
+   ```bash
+   rustup install nightly
+   cargo +nightly install cargo-bundle
+   ```
+3. Install the required Rust targets:
+   ```bash
+   rustup target add aarch64-apple-ios
+   rustup target add aarch64-apple-ios-sim
+   ```
+4. Optional: export `CARGO_TARGET_DIR` if you use a custom target directory.
 
-```
-cargo xtask ios-sim-smoke
-```
+## 1. Automated smoke test (`ios-cargo`)
 
-What this does:
+We ship a small binary crate (`apps/eframe-ios-app`) that launches `egui_demo_app`. Build, bundle,
+install, and launch it in the simulator with:
 
-1. Executes `scripts/build_ios_runner.sh` to compile `eframe-ios-runner` for the device + simulator targets.
-2. Copies the generated `EframeIos.xcframework` and `eframe_ios_runner.h` into the SwiftUI harness under `examples/ios/runner-smoke/`.
-3. Invokes `xcodebuild` against the shared `RunnerSmoke` scheme for the iOS simulator destination (defaults to `platform=iOS Simulator,name=iPhone 16`; override with `IOS_SMOKE_DESTINATION`).
-
-The command succeeds only if both the Rust build and the Swift host build succeed, so it is safe to wire up in CI. Use the manual steps below only when you need to inspect or tweak the harness directly.
-
-## 1. Build the runner
-
-```
-./scripts/build_ios_runner.sh
-```
-
-This produces:
-
-* `target/ios/EframeIos.xcframework`
-* `target/ios/eframe_ios_runner.h`
-
-Both artefacts are required for the Xcode project in the next step.
-
-## 2. Create or reuse a SwiftUI shell
-
-The repository already contains a ready-to-run harness under
-`ios/runner-smoke/RunnerSmoke.xcodeproj`. Open it in Xcode after
-running the smoke command if you want to iterate interactively—the project
-expects the xcframework + header to live under `Frameworks/` and `Generated/`,
-which the xtask copies automatically.
-
-If you prefer to wire up your own host from scratch, follow these steps:
-
-1. In Xcode, create a new *App* project.
-2. Add `target/ios/EframeIos.xcframework` to the project (drag it into the
-   Project navigator, select “Copy items if needed”).
-3. Add a bridging header (e.g. `EguiImeTest-Bridging-Header.h`) containing
-   `#include "eframe_ios_runner.h"`.
-4. Update build settings:
-   * `Framework Search Paths`: add the folder containing the xcframework (the
-     harness uses `$(PROJECT_DIR)/Frameworks`).
-   * `Header Search Paths`: add the folder containing the copied header (the
-     harness uses `$(PROJECT_DIR)/Generated`).
-   * `Objective-C Bridging Header`: point to the header you just created.
-   * Ensure the xcframework is set to “Embed & Sign” (or “Do Not Embed” if you
-     prefer to handle it manually).
-
-Replace the SwiftUI `App` body with:
-
-```swift
-import SwiftUI
-
-@main
-struct EguiImeTestApp: App {
-    init() {
-        eframe_ios_run_demo()
-    }
-
-    var body: some Scene {
-        WindowGroup {
-            // Empty view: Rust renders everything.
-            Color.clear
-        }
-    }
-}
+```bash
+./ios-cargo run --sim --manifest-path apps/eframe-ios-app/Cargo.toml
 ```
 
-## 3. Simulator validation
+What happens:
 
-1. Select an iPhone simulator (e.g. iPhone 16, iOS 18).
-2. Run the app from Xcode.
-3. Inside the egui demo window:
-   * Open “Widgets → Text Edit” and tap the multiline text field.
-   * The software keyboard must appear.
-   * Type characters and verify they show up immediately inside the egui text
-     edit. This confirms that `WindowEvent::Ime` events reach egui.
-4. Repeat the test on “Widgets → Text Edit (Singleline)” if you need extra
-   coverage.
+1. `cargo bundle --target aarch64-apple-ios-sim --manifest-path apps/eframe-ios-app/Cargo.toml`
+   produces `target/aarch64-apple-ios-sim/debug/bundle/ios/egui-ios-demo.app`.
+2. The script installs the bundle into the booted simulator (or boots the newest iPhone if none are running).
+3. The app is launched via `xcrun simctl launch --console …`, so stdout/stderr (including
+   `[egui-ios-ime] …` logs) stream to your terminal.
 
-If the keyboard fails to appear or characters don’t show up, capture the Xcode
-console log and file an issue referencing the egui and winit versions used.
+Tips:
+
+- Pass `--device <udid>` to target a specific simulator.
+- Use `--release` (and/or `--ipad`) when you need IPA archives.
+
+## 2. IME validation steps
+
+1. Once the simulator displays the egui demo, open “Widgets → Text Edit”.
+2. Tap inside both the multi-line and single-line text fields. The software keyboard must appear.
+3. Type a short phrase. Characters must show up immediately in egui **and** the terminal that ran
+   `ios-cargo` should log entries such as:
+   ```
+   [egui-ios-ime] WindowEvent::Ime: Commit("hello")
+   ```
+4. If the keyboard does not appear or the logs stay silent:
+   - Toggle “I/O → Keyboard → Toggle Software Keyboard” (⇧⌘K) in the simulator.
+   - Capture `xcrun simctl spawn <udid> log show --style syslog --last 2m --predicate 'process == "egui-ios-demo"'`
+     and attach it to the issue you file.
+
+## 3. Manual fallback (deprecated harness)
+
+The previous Swift/Xcode harness still lives in `ios/runner-smoke/RunnerSmoke.xcodeproj` for debugging
+custom UIKit code. Keep it only if you need to inspect Swift-side behaviour manually; the
+cargo-bundle flow above is now the canonical way to package + validate egui on iOS. When using the old
+harness, remember to run `scripts/build_ios_runner.sh`, copy the resulting xcframework/header into
+`Frameworks/` and `Generated/`, then drive it via `xcodebuild` or Xcode UI.
